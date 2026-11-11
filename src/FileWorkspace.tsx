@@ -1,4 +1,5 @@
 import {errorMessage} from './errors';
+import {confirmFileTrash} from './recordTools';
 import {canReadWorkspace,canWriteWorkspace,canBackupWorkspace} from './access';
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {FolderOpen,FolderPlus,FilePlus,Download,Eye,ExternalLink,Trash2,RefreshCw,FolderInput,BookOpen,Archive,Upload,Undo2,History,Link2} from 'lucide-react';
@@ -160,6 +161,7 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
     await done('Link file to research record',async()=>{const {error}=await db!.from('file_links').insert({file_id:file.id,record_type:t,record_id:id});if(error)throw error;});
   }
   async function toggleTrash(file:RecordRow){
+    if(!file.trashed_at && !window.confirm(confirmFileTrash(file.original_name)))return;
     await done(file.trashed_at?'Restore file':'Move file to trash',async()=>{
       const {error}=await db!.from('files').update({trashed_at:file.trashed_at?null:new Date().toISOString()}).eq('id',file.id);
       if(error)throw error;
