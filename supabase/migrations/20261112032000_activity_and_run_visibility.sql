@@ -87,7 +87,7 @@ begin
     else action_:='unarchived'; end if;
   end if;
   insert into public.activity_events(entity_type,record_id,action,label,changed_fields,actor_label)
-    values(tg_table_name,record_id,action_,left(label_,250),changed_,
+    values(tg_table_name,record_id_,action_,left(label_,250),changed_,
       case when (select auth.uid()) is null then 'System' else 'Owner' end);
   if tg_op='DELETE' then return old; else return new; end if;
 end;
