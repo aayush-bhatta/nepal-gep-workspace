@@ -181,9 +181,9 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
     if(!archive||!confirm('Restore missing records and files from this archive? Existing records will NOT be overwritten. Errors can leave a partial restore; review the report and retry.'))return;
     await done('Restore research backup',async()=>{const r=await restoreBackup(db!,archive,setNotice);setArchive(null);return `Restore complete. Objects: ${r.uploadedObjects}; new records: ${Object.entries(r.inserted).filter(x=>x[1]).map(x=>`${x[0]} ${x[1]}`).join(', ')||'none'}. Existing records were not replaced.`;});
   }
-  if(!allowed)return <section className="card"><h2>Private research file storage</h2><p>Sign in with an invited owner, editor or viewer account to view private files.</p></section>;
+  if(!allowed)return <section className="card"><h2>Private research file storage</h2><p>Research files are publicly readable. Only the Owner can upload, edit or restore.</p></section>;
   return <section className="gep-files">
-    <div className="heading"><div><p className="eyebrow">PRIVATE SUPABASE STORAGE</p><h1>Files & folders</h1><p>{editable?'Preview research evidence, track versions, and back up actual file bytes.':'Read-only research access: preview or download private evidence. Changes and backup restore are disabled.'}</p></div>
+    <div className="heading"><div><p className="eyebrow">PUBLIC READ-ONLY RESEARCH FILES</p><h1>Files & folders</h1><p>{editable?'Preview research evidence, track versions, and back up actual file bytes.':'Public read-only research access: preview or download available evidence. Only the Owner can make changes.'}</p></div>
       <div className="actions"><button onClick={()=>void load().catch(e=>setError(errorMessage(e)))}><RefreshCw size={16}/> Refresh</button>{editable&&<button onClick={()=>void addFolder()}><FolderPlus size={16}/> Folder</button>}
         {editable&&<label className="button primary"><Upload size={16}/> Upload files<input type="file" multiple hidden disabled={!!busy} onChange={e=>{void upload(e.target.files);e.target.value='';}}/></label>}</div>
     </div>
