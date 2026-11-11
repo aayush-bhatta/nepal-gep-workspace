@@ -1,4 +1,5 @@
 import {errorMessage} from './errors';
+import {canReadWorkspace,canWriteWorkspace,canBackupWorkspace} from './access';
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {FolderOpen,FolderPlus,FilePlus,Download,Eye,ExternalLink,Trash2,RefreshCw,FolderInput,BookOpen,Archive,Upload,Undo2,History,Link2} from 'lucide-react';
 import {visibleFolders,folderOccupied} from './folderUtils';
@@ -13,12 +14,12 @@ const FIELD_LABELS:Record<string,string>={notes:'Research notes / assumptions',r
 const ROLES=['Input','Paper / source','Methodology / code','Result','Report','Other'];
 const fieldKeys=['notes','research_role','document_title','authors','publication_year','source_url','source_reference','source_access_date','external_url','tags'] as const;
 
-function Metadata({file,versions,links,onClose,onSaved}:{file:RecordRow;versions:RecordRow[];links:RecordRow[];onClose:()=>void;onSaved:()=>void}){
+function Metadata({file,versions,links,onClose,onSaved,editable}:{file:RecordRow;versions:RecordRow[];links:RecordRow[];onClose:()=>void;onSaved:()=>void;editable:boolean}){
   const [draft,setDraft]=useState<Record<string,any>>({...file,tags:(file.tags||[]).join(', ')});
   const [error,setError]=useState('');const [busy,setBusy]=useState(false);
   const currentVersions=versions.filter(v=>v.file_id===file.id).sort((a,b)=>b.version_number-a.version_number);
   async function save(){
-    if(!db)return;setBusy(true);setError('');
+    if(!db||!editable)return;setBusy(true);setError('');
     try{
       for(const key of ['source_url','external_url'] as const){
         if(draft[key] && !safeExternalUrl(draft[key]))throw Error(`${FIELD_LABELS[key]} must begin with https://`);
@@ -43,9 +44,9 @@ function Metadata({file,versions,links,onClose,onSaved}:{file:RecordRow;versions
       <p className="muted">SHA-256: <code>{file.sha256||'Not recorded for original upload'}</code></p>
       <div className="fields">
         {fieldKeys.map(key=><label key={key}>{FIELD_LABELS[key]}
-          {key==='research_role'?<select value={draft[key]||'Other'} onChange={e=>setDraft({...draft,[key]:e.target.value})}>{ROLES.map(role=><option key={role}>{role}</option>)}</select>
-            :key==='notes'?<textarea rows={4} value={draft[key]||''} onChange={e=>setDraft({...draft,[key]:e.target.value})}/>
-              :<input type={key==='publication_year'?'number':key==='source_access_date'?'date':'text'} value={draft[key]||''} onChange={e=>setDraft({...draft,[key]:e.target.value})}/>}
+          {key==='research_role'?<select disabled={!editable} value={draft[key]||'Other'} onChange={e=>setDraft({...draft,[key]:e.target.value})}>{ROLES.map(role=><option key={role}>{role}</option>)}</select>
+            :key==='notes'?<textarea readOnly={!editable} rows={4} value={draft[key]||''} onChange={e=>setDraft({...draft,[key]:e.target.value})}/>
+              :<input readOnly={!editable} type={key==='publication_year'?'number':key==='source_access_date'?'date':'text'} value={draft[key]||''} onChange={e=>setDraft({...draft,[key]:e.target.value})}/>}
         </label>)}
       </div>
       <h3>Recorded versions (earlier bytes retained)</h3>
@@ -56,7 +57,7 @@ function Metadata({file,versions,links,onClose,onSaved}:{file:RecordRow;versions
       <h3>Research links</h3>
       <div className="version-list">{links.filter(v=>v.file_id===file.id).map(link=><div key={link.id}>{link.record_type}: <code>{link.record_id}</code></div>)}{!links.some(x=>x.file_id===file.id)&&<p className="muted">No linked input, scenario, run or task yet.</p>}</div>
       {error&&<p className="error" role="alert">{error}</p>}
-      <footer><button onClick={onClose}>Cancel</button><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?'Saving…':'Save provenance'}</button></footer>
+      <footer><button onClick={onClose}>Close</button>{editable&&<button className="primary" disabled={busy} onClick={()=>void save()}>{busy?'Saving…':'Save provenance'}</button>}</footer>
     </section>
   </div>;
 }
@@ -70,7 +71,8 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
   const [archive,setArchive]=useState<OpenedArchive|null>(null);
   const replaceInput=useRef<HTMLInputElement|null>(null);const [replaceTarget,setReplaceTarget]=useState<RecordRow|null>(null);
   const archiveInput=useRef<HTMLInputElement|null>(null);
-  const allowed=role==='owner'||role==='editor';
+  const allowed=canReadWorkspace(role);
+  const editable=canWriteWorkspace(role);
   const load=useCallback(async()=>{
     if(!db||!allowed)return;setError('');
     const tables=['folders','files','file_versions','file_links'] as const;
@@ -86,6 +88,7 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
   const foldersHere=navigationFolders.filter(f=>f.path.startsWith(folder?folder+'/':'') && f.path.slice(folder?folder.length+1:0).split('/').length===1).sort((a,b)=>a.path.localeCompare(b.path));
   const shownFiles=files.filter(f=>(includeTrash||!f.trashed_at) && (search?f.original_name.toLowerCase().includes(search.toLowerCase())||String(f.document_title||'').toLowerCase().includes(search.toLowerCase()):f.folder_path===folder)).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
   const done=async(message:string,action:()=>Promise<string|void>)=>{
+    if(!editable){setError('Read-only access: changes are restricted to owners and editors.');return;}
     setBusy(message);setError('');setNotice('');
     try{const detail=await action();await load();setNotice(detail||`${message} completed.`);}catch(e){setError(errorMessage(e));}finally{setBusy('');}
   };
@@ -178,11 +181,11 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
     if(!archive||!confirm('Restore missing records and files from this archive? Existing records will NOT be overwritten. Errors can leave a partial restore; review the report and retry.'))return;
     await done('Restore research backup',async()=>{const r=await restoreBackup(db!,archive,setNotice);setArchive(null);return `Restore complete. Objects: ${r.uploadedObjects}; new records: ${Object.entries(r.inserted).filter(x=>x[1]).map(x=>`${x[0]} ${x[1]}`).join(', ')||'none'}. Existing records were not replaced.`;});
   }
-  if(!allowed)return <section className="card"><h2>Private research file storage</h2><p>Sign in with an invited owner/editor account to view your private files and backup tools.</p></section>;
+  if(!allowed)return <section className="card"><h2>Private research file storage</h2><p>Sign in with an invited owner, editor or viewer account to view private files.</p></section>;
   return <section className="gep-files">
-    <div className="heading"><div><p className="eyebrow">PRIVATE SUPABASE STORAGE</p><h1>Files & folders</h1><p>Preview research evidence, track versions, and back up actual file bytes.</p></div>
-      <div className="actions"><button onClick={()=>void load().catch(e=>setError(errorMessage(e)))}><RefreshCw size={16}/> Refresh</button><button onClick={()=>void addFolder()}><FolderPlus size={16}/> Folder</button>
-        <label className="button primary"><Upload size={16}/> Upload files<input type="file" multiple hidden disabled={!!busy} onChange={e=>{void upload(e.target.files);e.target.value='';}}/></label></div>
+    <div className="heading"><div><p className="eyebrow">PRIVATE SUPABASE STORAGE</p><h1>Files & folders</h1><p>{editable?'Preview research evidence, track versions, and back up actual file bytes.':'Read-only research access: preview or download private evidence. Changes and backup restore are disabled.'}</p></div>
+      <div className="actions"><button onClick={()=>void load().catch(e=>setError(errorMessage(e)))}><RefreshCw size={16}/> Refresh</button>{editable&&<button onClick={()=>void addFolder()}><FolderPlus size={16}/> Folder</button>}
+        {editable&&<label className="button primary"><Upload size={16}/> Upload files<input type="file" multiple hidden disabled={!!busy} onChange={e=>{void upload(e.target.files);e.target.value='';}}/></label>}</div>
     </div>
     {busy&&<p className="notice" role="status">{busy}…</p>}{notice&&<p className="notice" role="status">{notice}</p>}{error&&<p className="error" role="alert">{error} <button onClick={()=>setError('')}>Dismiss</button></p>}
     <input type="file" ref={replaceInput} hidden onChange={e=>{void replaceVersion(e.target.files);e.target.value='';}}/>
@@ -191,7 +194,7 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
       <div className="breadcrumbs"><button onClick={()=>{setFolder('');setSearch('');}}>Root folders</button>{folder.split('/').filter(Boolean).map((part,i,a)=><React.Fragment key={i}><span>/</span><button onClick={()=>{setFolder(a.slice(0,i+1).join('/'));setSearch('');}}>{part}</button></React.Fragment>)}</div>
       <div className="foldergrid">{foldersHere.map(f=><div className="foldercard" key={f.id}>
         <button className="folder-name" onClick={()=>{setFolder(f.path);setSearch('');}}><FolderOpen size={20}/> {f.path.split('/').at(-1)}</button>
-        <div className="folder-card-actions">{f.virtual?<small>Virtual parent</small>:<><button aria-label={`Rename or move ${f.path}`} onClick={()=>void editFolder(f)}>Edit</button><button aria-label={`Delete ${f.path}`} onClick={()=>void deleteFolder(f)}><Trash2 size={14}/></button></>}</div>
+        <div className="folder-card-actions">{f.virtual?<small>Virtual parent</small>:editable&&<><button aria-label={`Rename or move ${f.path}`} onClick={()=>void editFolder(f)}>Edit</button><button aria-label={`Delete ${f.path}`} onClick={()=>void deleteFolder(f)}><Trash2 size={14}/></button></>}</div>
       </div>)}</div>
       <div className="file-title-row"><h2>Files {search?'(search results)':folder?'in '+folder:'at root'}</h2><label><input type="checkbox" checked={includeTrash} onChange={e=>setIncludeTrash(e.target.checked)}/> Show trash</label></div>
       <input className="file-search-input" placeholder="Search filename or source title across all folders" value={search} onChange={e=>setSearch(e.target.value)}/>
@@ -200,16 +203,16 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
           <button onClick={()=>setPreview({file:f})}><Eye size={14}/> Preview</button>
           <button onClick={()=>void download(f)}><Download size={14}/> Download</button>
           <button onClick={()=>setSelected(f)}><BookOpen size={14}/> Details</button>
-          {!f.trashed_at&&<><button onClick={()=>{setReplaceTarget(f);replaceInput.current?.click();}}><History size={14}/> New version</button>
+          {editable&&!f.trashed_at&&<><button onClick={()=>{setReplaceTarget(f);replaceInput.current?.click();}}><History size={14}/> New version</button>
           <button onClick={()=>void move(f)}><FolderInput size={14}/> Move</button><button onClick={()=>void rename(f)}>Rename</button>
           <button onClick={()=>void link(f)}><Link2 size={14}/> Link</button></>}
-          <button onClick={()=>void toggleTrash(f)}>{f.trashed_at?<Undo2 size={14}/>:<Trash2 size={14}/>} {f.trashed_at?'Restore':'Trash'}</button>
+          {editable&&<button onClick={()=>void toggleTrash(f)}>{f.trashed_at?<Undo2 size={14}/>:<Trash2 size={14}/>} {f.trashed_at?'Restore':'Trash'}</button>}
           {fileExtension(f.original_name)==='ipynb'&&colabUrl(f.external_url)&&<a className="button" href={colabUrl(f.external_url)!} rel="noopener noreferrer" target="_blank"><ExternalLink size={14}/> Open in Colab</a>}
         </div></td></tr>)}
         {!shownFiles.length&&<tr><td colSpan={6} className="empty">No files here. Select a folder, upload evidence or search by filename.</td></tr>}
       </tbody></table></div>
     </div>
-    {role==='owner'&&<div className="card gep-backup"><h2><Archive size={19}/> Backup & restore</h2>
+    {canBackupWorkspace(role)&&<div className="card gep-backup"><h2><Archive size={19}/> Backup & restore</h2>
       <p>Full ZIP contains research records and **actual private object bytes**, including historical versions. Does not contain Supabase Auth passwords or user-role settings. Keep at least one backup away from Supabase.</p>
       <div className="actions"><button disabled={!!busy} onClick={()=>void backup()}><Download size={16}/> Full ZIP backup</button><button disabled={!!busy} onClick={()=>archiveInput.current?.click()}><FilePlus size={16}/> Open ZIP to restore</button></div>
       <small className="muted">Client-side backups/restores are capped at 250 MB uncompressed; use Supabase CLI and Storage/S3 export for larger datasets. Restore is add-only and can be partially completed if interrupted.</small>
@@ -219,7 +222,7 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
       </div>}
     </div>}
     <p className="muted">Research traceability: use Details for source citation, pages, assumptions, tags and version history; Link associates the file with an input, scenario, model run or task. Uploads are never automatically marked verified.</p>
-    {selected&&<Metadata file={selected} versions={versions} links={links} onClose={()=>setSelected(null)} onSaved={()=>void load()}/>}
+    {selected&&<Metadata file={selected} versions={versions} links={links} editable={editable} onClose={()=>setSelected(null)} onSaved={()=>void load()}/>}
     {preview&&<FilePreview file={preview.file} versions={versions.filter(v=>v.file_id===preview.file.id)} onClose={()=>setPreview(null)} onDownload={(version)=>void download(preview.file,version)}/>}
   </section>;
 }
