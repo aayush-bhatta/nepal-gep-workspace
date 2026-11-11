@@ -93,7 +93,9 @@ function safeZipTarget(target: string): string {
 }
 
 export async function xlsxSheetNames(blob: Blob): Promise<string[]> {
+  if(blob.size>8*1024*1024)throw Error('Spreadsheet preview capped at 8 MB');
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  if(Object.values(zip.files).reduce((n,f)=>n+((f as any)._data?.uncompressedSize||0),0)>40*1024*1024)throw Error('Spreadsheet expanded size exceeds preview limit');
   if (Object.values(zip.files).some(f => ((f as any)._data?.uncompressedSize || 0) > 18 * 1024 * 1024)) throw Error('Spreadsheet contains an oversized entry; preview rejected');
   const book = zip.file('xl/workbook.xml');
   if (!book) throw Error('Not a supported .xlsx workbook');
@@ -105,6 +107,7 @@ export async function previewXlsx(blob: Blob, selectedSheet?: string): Promise<P
   // The ZIP is parsed as data only. Macros and spreadsheet formulas are never executed.
   if (blob.size > 8 * 1024 * 1024) throw Error('Spreadsheet preview capped at 8 MB; download this file for larger analyses.');
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  if(Object.values(zip.files).reduce((n,f)=>n+((f as any)._data?.uncompressedSize||0),0)>40*1024*1024)throw Error('Spreadsheet expanded size exceeds preview limit');
   if (Object.values(zip.files).some(f => ((f as any)._data?.uncompressedSize || 0) > 18 * 1024 * 1024)) throw Error('Spreadsheet contains an oversized entry; preview rejected');
   const workbookEntry = zip.file('xl/workbook.xml');
   if (!workbookEntry) throw Error('Expected an .xlsx workbook (older .xls format is not supported).');

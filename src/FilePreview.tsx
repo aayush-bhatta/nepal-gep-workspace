@@ -1,12 +1,16 @@
-import React,{useEffect,useState} from 'react';
+import {lazy,Suspense} from 'react';
+import {errorMessage} from './errors';
+import React,{useEffect,useRef,useState} from 'react';
 import {Download,ExternalLink} from 'lucide-react';
 import {db,bucket} from './db';
 import {fileExtension,bytes,colabUrl,parseCsv,previewXlsx,xlsxSheetNames,type PreviewGrid} from './fileUtils';
 
 type Row={id:string;[key:string]:any};
 type Rendered = {kind:'pdf'|'image'|'table'|'text'|'notebook'|'unsupported';url?:string;grid?:PreviewGrid;text?:string;note?:string;cells?:{cell_type:string;source:string}[];sheets?:string[]};
+const PdfCanvas=lazy(()=>import('./PdfCanvas').then(module=>({default:module.PdfCanvas})));
 const allowedText = new Set(['py','txt','md','json','yaml','yml','toml','sql','log','tex','r','m','ipynb']);
 export function FilePreview({file,versions,onClose,onDownload}:{file:Row;versions:Row[];onClose:()=>void;onDownload:(version?:Row)=>void}){
+  const sheetRequest=useRef(0);
   const [versionId,setVersionId]=useState('current');
   const [sheet,setSheet]=useState<string>('');
   const [blob,setBlob]=useState<Blob|null>(null);
@@ -16,7 +20,8 @@ export function FilePreview({file,versions,onClose,onDownload}:{file:Row;version
   const target=chosenVersion||file;
   const name=target.original_name as string;
   useEffect(()=>{
-    let active=true;let objectUrl:string|undefined;
+    let active=true;let objectUrl:string|undefined;sheetRequest.current++;
+    const show=(value:Rendered)=>{if(active)setView(value);};
     const run=async()=>{
       if(!db)return;setLoading(true);setView(null);setError('');setBlob(null);setSheet('');
       const {data,error}=await db.storage.from(bucket).download(target.storage_path);
@@ -26,41 +31,41 @@ export function FilePreview({file,versions,onClose,onDownload}:{file:Row;version
       const ext=fileExtension(name);
       try{
         if(ext==='pdf'){
-          objectUrl=URL.createObjectURL(new Blob([data],{type:'application/pdf'}));setView({kind:'pdf',url:objectUrl,note:'Local browser PDF preview. File remains in private storage.'});
+          show({kind:'pdf',note:'PDF.js canvas preview. File remains in private storage.'});
         }else if(['png','jpeg','jpg','gif','webp','bmp','svg'].includes(ext)){
-          if(ext==='svg'){setView({kind:'unsupported',note:'SVG can contain active content, so it is not embedded. Download to inspect safely.'});}
-          else{objectUrl=URL.createObjectURL(data);setView({kind:'image',url:objectUrl});}
+          if(ext==='svg'){show({kind:'unsupported',note:'SVG can contain active content, so it is not embedded. Download to inspect safely.'});}
+          else{objectUrl=URL.createObjectURL(data);show({kind:'image',url:objectUrl});}
         }else if(ext==='csv'){
           if(data.size>12*1024*1024)throw Error('CSV preview capped at 12 MB; download for larger analysis');
-          setView({kind:'table',grid:parseCsv(await data.text())});
+          show({kind:'table',grid:parseCsv(await data.text())});
         }else if(ext==='xlsx'){
-          const sheets=await xlsxSheetNames(data);setView({kind:'table',grid:await previewXlsx(data,sheets[0]),sheets});
-          setSheet(sheets[0]||'');
+          const sheets=await xlsxSheetNames(data);show({kind:'table',grid:await previewXlsx(data,sheets[0]),sheets});
+          if(active)setSheet(sheets[0]||'');
         }else if(ext==='xls'){
-          setView({kind:'unsupported',note:'Legacy .xls files are not supported by the safe viewer. Convert to .xlsx or CSV for preview.'});
+          show({kind:'unsupported',note:'Legacy .xls files are not supported by the safe viewer. Convert to .xlsx or CSV for preview.'});
         }else if(ext==='ipynb'){
           if(data.size>5*1024*1024)throw Error('Notebook too large for browser preview');
           const raw=JSON.parse(await data.text());
           const cells=(Array.isArray(raw.cells)?raw.cells:[]).slice(0,150).map((c:any)=>({cell_type:String(c.cell_type||'code'),source:Array.isArray(c.source)?c.source.join(''):String(c.source||'')}));
-          setView({kind:'notebook',cells,note:'Notebook source only. Outputs are not executed; private Supabase notebooks must be uploaded to Colab or linked from Drive.'});
+          show({kind:'notebook',cells,note:'Notebook source only. Outputs are not executed; private Supabase notebooks must be uploaded to Colab or linked from Drive.'});
         }else if(allowedText.has(ext)){
           if(data.size>4*1024*1024)throw Error('Code/text preview capped at 4 MB');
-          setView({kind:'text',text:(await data.text()).slice(0,250000),note:'Text-only preview: file contents are never executed.'});
+          show({kind:'text',text:(await data.text()).slice(0,250000),note:'Text-only preview: file contents are never executed.'});
         }else{
-          setView({kind:'unsupported',note:'No in-browser viewer for this format. Keep it private and download it when needed.'});
+          show({kind:'unsupported',note:'No in-browser viewer for this format. Keep it private and download it when needed.'});
         }
-      }catch(e){if(active)setError(String(e));}
+      }catch(e){if(active)setError(errorMessage(e));}
       if(active)setLoading(false);
     };
-    void run();
+    void run().catch(e=>{if(active){setError(errorMessage(e));setLoading(false);}});
     return()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl);};
   },[target.storage_path,name]);
   async function changeSheet(next:string){
-    if(!blob)return;setSheet(next);setLoading(true);setError('');
-    try{setView(v=>({...v,kind:'table',grid:undefined} as Rendered));const grid=await previewXlsx(blob,next);setView(v=>({...v,kind:'table',grid} as Rendered));}
-    catch(e){setError(String(e));}finally{setLoading(false);}
+    if(!blob)return;const request=++sheetRequest.current;setSheet(next);setLoading(true);setError('');
+    try{setView(v=>({...v,kind:'table',grid:undefined} as Rendered));const grid=await previewXlsx(blob,next);if(request===sheetRequest.current)setView(v=>({...v,kind:'table',grid} as Rendered));}
+    catch(e){if(request===sheetRequest.current)setError(errorMessage(e));}finally{if(request===sheetRequest.current)setLoading(false);}
   }
-  const colab=colabUrl(file.external_url);
+  const colab=versionId==='current'?colabUrl(file.external_url):null;
   return <div className="overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}>
     <section className="modal file-modal preview-modal" role="dialog" aria-modal="true" aria-label="Private file preview">
       <header><div><h2>{file.original_name}</h2><small className="muted">Private preview · {bytes(target.byte_size)} · source unchanged</small></div><button onClick={onClose}>Close</button></header>
@@ -74,7 +79,7 @@ export function FilePreview({file,versions,onClose,onDownload}:{file:Row;version
       {loading&&<p role="status">Loading private file preview…</p>}
       {error&&<p className="error" role="alert">{error}</p>}
       {!loading&&view&&<div className="preview-body">
-        {view.kind==='pdf'&&<><p className="muted">{view.note}</p><iframe title={`PDF preview: ${name}`} className="pdf-preview" sandbox="allow-same-origin" src={view.url}/><a target="_blank" rel="noreferrer" href={view.url}>Open PDF in separate browser tab</a></>}
+        {view.kind==='pdf'&&<><p className="muted">{view.note}</p><Suspense fallback={<p role="status">Loading PDF renderer…</p>}><PdfCanvas blob={blob!}/></Suspense></>}
         {view.kind==='image'&&<img alt={`Preview of ${name}`} className="image-preview" src={view.url}/>}
         {view.kind==='table'&&view.grid&&<><p className="muted">{view.grid.note}</p><h3>{view.grid.title}</h3><div className="tablewrap csv-preview"><table><thead><tr>{view.grid.columns.map((c,i)=><th key={i}>{c}</th>)}</tr></thead><tbody>{view.grid.rows.map((r,i)=><tr key={i}>{view.grid!.columns.map((_,j)=><td key={j}>{r[j]||''}</td>)}</tr>)}</tbody></table></div></>}
         {view.kind==='text'&&<><p className="muted">{view.note}</p><pre className="code-preview">{view.text}</pre></>}
