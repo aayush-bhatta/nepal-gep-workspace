@@ -1,5 +1,8 @@
+import {errorMessage} from './errors';
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {FolderOpen,FolderPlus,FilePlus,Download,Eye,ExternalLink,Trash2,RefreshCw,FolderInput,BookOpen,Archive,Upload,Undo2,History,Link2} from 'lucide-react';
+import {visibleFolders,folderOccupied} from './folderUtils';
+import {rows} from './db';
 import {db,bucket,downloadBlob} from './db';
 import {fileExtension,bytes,sha256,compactDate,safeExternalUrl,colabUrl,MAX_UPLOAD} from './fileUtils';
 import {FilePreview} from './FilePreview';
@@ -31,7 +34,7 @@ function Metadata({file,versions,links,onClose,onSaved}:{file:RecordRow;versions
       const {error}=await db.from('files').update(payload).eq('id',file.id);
       if(error)throw error;
       onSaved();onClose();
-    }catch(e){setError(String(e));}finally{setBusy(false);}
+    }catch(e){setError(errorMessage(e));}finally{setBusy(false);}
   }
   return <div className="overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}>
     <section className="modal file-modal" role="dialog" aria-modal="true" aria-label="Research file details">
@@ -72,20 +75,19 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
     if(!db||!allowed)return;setError('');
     const tables=['folders','files','file_versions','file_links'] as const;
     const results=await Promise.all(tables.map(async table=>{
-      const {data,error}=await db!.from(table).select('*').order('created_at',{ascending:false}).limit(2000);
-      if(error)throw Error(`${table}: ${error.message}`);
-      return data||[];
+      return rows(table);
     }));
     setFolders(results[0]);setFiles(results[1]);setVersions(results[2]);setLinks(results[3]);
     onChanged?.();
   },[allowed,onChanged]);
-  useEffect(()=>{void load().catch(e=>setError(String(e)));},[load]);
+  useEffect(()=>{void load().catch(e=>setError(errorMessage(e)));},[load]);
 
-  const foldersHere=folders.filter(f=>f.path.startsWith(folder?folder+'/':'') && f.path.slice(folder?folder.length+1:0).split('/').length===1).sort((a,b)=>a.path.localeCompare(b.path));
+  const navigationFolders=visibleFolders(folders,files);
+  const foldersHere=navigationFolders.filter(f=>f.path.startsWith(folder?folder+'/':'') && f.path.slice(folder?folder.length+1:0).split('/').length===1).sort((a,b)=>a.path.localeCompare(b.path));
   const shownFiles=files.filter(f=>(includeTrash||!f.trashed_at) && (search?f.original_name.toLowerCase().includes(search.toLowerCase())||String(f.document_title||'').toLowerCase().includes(search.toLowerCase()):f.folder_path===folder)).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
   const done=async(message:string,action:()=>Promise<string|void>)=>{
     setBusy(message);setError('');setNotice('');
-    try{const detail=await action();await load();setNotice(detail||`${message} completed.`);}catch(e){setError(String(e));}finally{setBusy('');}
+    try{const detail=await action();await load();setNotice(detail||`${message} completed.`);}catch(e){setError(errorMessage(e));}finally{setBusy('');}
   };
   async function addFolder(){
     const name=prompt('Name for new folder');if(name===null)return;
@@ -99,6 +101,7 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
     await done('Move / rename folder',async()=>{const {data,error}=await db!.rpc('gep_move_folder',{p_old_path:current.path,p_destination:parent.trim(),p_name:name.trim()});if(error)throw error;if(folder===current.path||folder.startsWith(current.path+'/'))setFolder(data+folder.slice(current.path.length));});
   }
   async function deleteFolder(current:RecordRow){
+    if(folderOccupied(current.path,folders,files)){setError('Folder contains files (including trash) or subfolders; move them first.');return;}
     if(!confirm(`Delete empty folder "${current.path}"? This does not delete files.`))return;
     await done('Delete empty folder',async()=>{const {error}=await db!.rpc('gep_delete_empty_folder',{p_path:current.path});if(error)throw error;});
   }
@@ -113,7 +116,7 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
         const {error:upError}=await db!.storage.from(bucket).upload(key,file,{upsert:false,contentType:file.type||'application/octet-stream'});
         if(upError)throw upError;
         const {error:rowError}=await db!.from('files').insert({folder_path:folder,original_name:file.name,storage_path:key,byte_size:file.size,mime_type:file.type||null,sha256:hash,research_role:'Other',current_version:1});
-        if(rowError){await db!.storage.from(bucket).remove([key]);throw rowError;}
+        if(rowError)throw Error(`${errorMessage(rowError)}. Uploaded object retained at ${key}; a network error can occur after a successful commit. Refresh before retrying.`);
       }
     });
   }
@@ -127,7 +130,7 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
       const {error:upErr}=await db!.storage.from(bucket).upload(key,file,{upsert:false,contentType:file.type||'application/octet-stream'});
       if(upErr)throw upErr;
       const {error}=await db!.rpc('gep_register_file_version',{p_file_id:target.id,p_storage_path:key,p_original_name:file.name,p_byte_size:file.size,p_mime_type:file.type||null,p_sha256:hash,p_notes:'User uploaded replacement version'});
-      if(error){await db!.storage.from(bucket).remove([key]);throw error;}
+      if(error)throw Error(`${errorMessage(error)}. Uploaded version retained at ${key}; refresh history before retrying because the transaction may have committed.`);
     });
   }
   async function download(file:RecordRow,version?:RecordRow){
@@ -137,7 +140,7 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
   }
   async function move(file:RecordRow){
     const destination=prompt('Move to folder path (empty for All folders/root)',file.folder_path||'');if(destination===null)return;
-    const path=destination.trim();if(path&&!folders.some(f=>f.path===path)){setError('Create the destination folder first');return;}
+    const path=destination.trim();if(path&&!navigationFolders.some(f=>f.path===path)){setError('Create the destination folder first');return;}
     await done('Move file',async()=>{const {error}=await db!.from('files').update({folder_path:path}).eq('id',file.id);if(error)throw error;});
   }
   async function rename(file:RecordRow){
@@ -169,7 +172,7 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
   }
   async function chooseArchive(file:File|undefined){
     if(!file)return;setError('');setArchive(null);setBusy('Checking backup');
-    try{setArchive(await openBackup(file,setNotice));}catch(e){setError(String(e));}finally{setBusy('');}
+    try{setArchive(await openBackup(file,setNotice));}catch(e){setError(errorMessage(e));}finally{setBusy('');}
   }
   async function restore(){
     if(!archive||!confirm('Restore missing records and files from this archive? Existing records will NOT be overwritten. Errors can leave a partial restore; review the report and retry.'))return;
@@ -178,17 +181,17 @@ export function FileWorkspace({role,onChanged}:{role:string;onChanged?:()=>void}
   if(!allowed)return <section className="card"><h2>Private research file storage</h2><p>Sign in with an invited owner/editor account to view your private files and backup tools.</p></section>;
   return <section className="gep-files">
     <div className="heading"><div><p className="eyebrow">PRIVATE SUPABASE STORAGE</p><h1>Files & folders</h1><p>Preview research evidence, track versions, and back up actual file bytes.</p></div>
-      <div className="actions"><button onClick={()=>void load()}><RefreshCw size={16}/> Refresh</button><button onClick={()=>void addFolder()}><FolderPlus size={16}/> Folder</button>
+      <div className="actions"><button onClick={()=>void load().catch(e=>setError(errorMessage(e)))}><RefreshCw size={16}/> Refresh</button><button onClick={()=>void addFolder()}><FolderPlus size={16}/> Folder</button>
         <label className="button primary"><Upload size={16}/> Upload files<input type="file" multiple hidden disabled={!!busy} onChange={e=>{void upload(e.target.files);e.target.value='';}}/></label></div>
     </div>
     {busy&&<p className="notice" role="status">{busy}…</p>}{notice&&<p className="notice" role="status">{notice}</p>}{error&&<p className="error" role="alert">{error} <button onClick={()=>setError('')}>Dismiss</button></p>}
     <input type="file" ref={replaceInput} hidden onChange={e=>{void replaceVersion(e.target.files);e.target.value='';}}/>
     <input type="file" ref={archiveInput} accept=".zip,application/zip" hidden onChange={e=>{void chooseArchive(e.target.files?.[0]);e.target.value='';}}/>
     <div className="card">
-      <div className="breadcrumbs"><button onClick={()=>setFolder('')}>All folders</button>{folder.split('/').filter(Boolean).map((part,i,a)=><React.Fragment key={i}><span>/</span><button onClick={()=>setFolder(a.slice(0,i+1).join('/'))}>{part}</button></React.Fragment>)}</div>
+      <div className="breadcrumbs"><button onClick={()=>{setFolder('');setSearch('');}}>Root folders</button>{folder.split('/').filter(Boolean).map((part,i,a)=><React.Fragment key={i}><span>/</span><button onClick={()=>{setFolder(a.slice(0,i+1).join('/'));setSearch('');}}>{part}</button></React.Fragment>)}</div>
       <div className="foldergrid">{foldersHere.map(f=><div className="foldercard" key={f.id}>
-        <button className="folder-name" onClick={()=>setFolder(f.path)}><FolderOpen size={20}/> {f.path.split('/').at(-1)}</button>
-        <div className="folder-card-actions"><button aria-label={`Rename or move ${f.path}`} onClick={()=>void editFolder(f)}>Edit</button><button aria-label={`Delete ${f.path}`} onClick={()=>void deleteFolder(f)}><Trash2 size={14}/></button></div>
+        <button className="folder-name" onClick={()=>{setFolder(f.path);setSearch('');}}><FolderOpen size={20}/> {f.path.split('/').at(-1)}</button>
+        <div className="folder-card-actions">{f.virtual?<small>Virtual parent</small>:<><button aria-label={`Rename or move ${f.path}`} onClick={()=>void editFolder(f)}>Edit</button><button aria-label={`Delete ${f.path}`} onClick={()=>void deleteFolder(f)}><Trash2 size={14}/></button></>}</div>
       </div>)}</div>
       <div className="file-title-row"><h2>Files {search?'(search results)':folder?'in '+folder:'at root'}</h2><label><input type="checkbox" checked={includeTrash} onChange={e=>setIncludeTrash(e.target.checked)}/> Show trash</label></div>
       <input className="file-search-input" placeholder="Search filename or source title across all folders" value={search} onChange={e=>setSearch(e.target.value)}/>

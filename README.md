@@ -26,7 +26,7 @@ Private research-management workspace for Nepal generation expansion planning (G
 
 **v2 database migration has already been applied** as `20261110175204_file_workspace_v2` in the existing Supabase project. Do not run the initial migrations again. The original `syllabus.pdf`, its private object path, the input record and initial folders remain intact.
 
-The latest source ZIP and deployment patch are included in this ChatGPT conversation. The GitHub integration's write attempts returned HTTP 403, so **this frontend upgrade is not live until the files are committed to the actual GitHub repository** and the GitHub Actions workflow finishes successfully. See `UPLOAD-TO-GITHUB.md` and `UPGRADE-V2.md` for exact directions.
+Repairs are delivered through a pull request against `main`. Review and merge approval is required before the existing Pages deployment workflow publishes them. No new database migration is required for this repair.
 
 The `.github/workflows/deploy.yml` action checks out `main`, sets up Node 22, installs dependencies, runs tests and builds Vite. It deploys `dist` to GitHub Pages. It uses existing GitHub Actions repository variables:
 
@@ -36,7 +36,7 @@ The `.github/workflows/deploy.yml` action checks out `main`, sets up Node 22, in
 
 No Supabase service-role key, database password, or GitHub token belongs in client-side configuration. `.gitignore` excludes `.env` and `.env.local`.
 
-**Developer setup:** use Node 22, run `npm install` (generates `package-lock.json`), `npm test`, `npm run build`, then `npm run dev`. Commit the generated lockfile after a successful install; prefer `npm ci` in CI afterward. This package was prepared in a container without npm registry access, so its full dependency installation, Vite build and end-to-end tests could not run here.
+**Developer setup:** use Node 22, run `npm ci`, `npm test`, `npm run build`, and `npm run dev`. The committed `package-lock.json` pins the dependency graph. For browser checks, install Chromium with `npx playwright install chromium` and run `npm run test:browser`. The tests use synthetic private file bytes and intercepted Supabase responses; they never write to the live project. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to use a specific Chromium/Brave executable. See [REPAIR-VERIFICATION.md](REPAIR-VERIFICATION.md) for results, changed files, recovery limits and manual checks.
 
 ## Storage and privacy model
 
@@ -59,4 +59,4 @@ No Supabase service-role key, database password, or GitHub token belongs in clie
 
 ## Technical caveats
 
-The backend migration and schema checks have been verified; a browser session has not yet been used to test every new operation. No claim is made that the upgraded frontend is already deployed. See `UPGRADE-V2.md` for verification and the exact cases to test before relying on backup/restore.
+Automated Chromium checks cover real PDF.js canvas output, navigation/zoom, image, CSV, Excel `.xlsx`, Python and notebook previews, metadata fields, Colab links, folder protection and readable errors. Brave Shields and signed-in live workflows still need manual verification. This branch has not been deployed and no live database or Storage data was changed. Detailed limitations and recovery instructions are in [REPAIR-VERIFICATION.md](REPAIR-VERIFICATION.md).
