@@ -95,3 +95,15 @@ test('empty-folder deletion calls the protected RPC after confirmation',async({p
  await page.getByRole('button',{name:'Root folders',exact:true}).click();await page.getByRole('button',{name:'Refresh',exact:true}).click();page.on('dialog',dialog=>dialog.accept());
  await page.getByRole('button',{name:'Delete Empty',exact:true}).click();await expect(page.getByRole('button',{name:'Empty',exact:true})).toHaveCount(0);expect(deleted).toBe(true);
 });
+
+test('file trash requires explicit confirmation, and cancel keeps the file',async({page})=>{
+ let patchCount=0;
+ await page.route('**/rest/v1/files?**',async route=>{
+  if(route.request().method()==='PATCH'){patchCount++;return route.fulfill({status:204,body:''});}
+  return route.fallback();
+ });
+ const row=page.getByRole('row').filter({hasText:'research.pdf'});
+ page.once('dialog',dialog=>{expect(dialog.message()).toContain('research.pdf');expect(dialog.message()).toContain('can be restored');void dialog.dismiss();});
+ await row.getByRole('button',{name:'Trash',exact:true}).click();
+ expect(patchCount).toBe(0);
+});
