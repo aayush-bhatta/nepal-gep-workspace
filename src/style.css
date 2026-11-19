@@ -159,3 +159,7 @@
  .study-statusline{gap:9px 14px}
  .study-parameters{grid-template-columns:1fr}
 }
+
+/* Section jump buttons must not replace the GitHub Pages HashRouter URL */
+.study-page-nav button{border:0;background:transparent;color:#315849;font-size:13px;font-weight:600;padding:4px 0;cursor:pointer;line-height:1.4}
+.study-page-nav button:hover,.study-page-nav button:focus-visible{text-decoration:underline}
