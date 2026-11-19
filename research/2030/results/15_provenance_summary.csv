@@ -1,0 +1,19 @@
+Parameter,Value,Unit,Evidence_Quality,Source
+Existing hydro total,3901.366,MW,Published source claimed in notebook,NEA FY2025/26 Appendix 5
+Existing solar total,154.94,MW,Published source claimed in notebook,NEA FY2025/26 Appendix 5
+Unclassified existing hydro,1077.481,MW,Not yet technology-verified,User Step 34 ledger
+Unknown-hydro share treated as ROR,1,fraction,Explicit assumption,2030 scenario
+Provisional ROR-family plant labels,904.6,MW,Provisional classification,Step 31 audit
+2030 consumer demand,24737,GWh,Published-source forecast,JICA IPSDP 2024 middle case
+2030 system losses,13.9,percent,Source-based forecast,JICA IPSDP 2024 Annex 5
+2030 peak demand,4949,MW,Source-based forecast,JICA IPSDP 2024 middle case
+ROR planning CF,0.64208,fraction,Calculated 2040-to-2030 proxy,JICA IPSDP planning portfolio
+PROR planning CF,0.5649,fraction,Calculated 2040-to-2030 proxy,JICA IPSDP planning portfolio
+Existing Kulekhani chain annual output,92362.28,MWh,Historical figure cited in notebook,NEA FY2025/26 generation table
+Solar annual CF,0.17,fraction,Planning proxy,JICA / user scenario
+New reservoir duration,900,hours,Explicit assumption,2030 scenario
+PROR pondage duration,6,hours,Explicit assumption,2030 scenario
+FX rate,145,NPR/USD,Explicit assumption,2030 scenario
+Discount rate,8,percent,Explicit assumption,2030 scenario
+Import capacity limit,750,MW,Scenario assumption,Historical NEA context
+Deterministic ENS limit,0.01,percent annual demand,Scenario assumption,2030 scenario

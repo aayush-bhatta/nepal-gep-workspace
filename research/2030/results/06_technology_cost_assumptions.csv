@@ -1,0 +1,5 @@
+Technology,CAPEX_USD_per_kW,Fixed_OM_USD_per_kW_year,Variable_OM_USD_per_MWh,Lifetime_years,Evidence_Status
+ROR,1650,35,1.5,40,"Embedded supplied-planning CSV benchmark; unverified for all rows"
+PROR,1850,40,2.0,45,"Embedded supplied-planning CSV benchmark; unverified for all rows"
+Storage Hydro,2500,50,2.5,50,"Embedded supplied-planning CSV benchmark; unverified for all rows"
+Solar PV,691,12,0,25,"Embedded supplied-planning CSV benchmark; unverified for all rows"
