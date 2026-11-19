@@ -8,15 +8,15 @@ const ROR_RATIO=[.4,.3,.4,.6,.8,1,1,1,1,5/6,2/3,.5];
 const PROR_RATIO=[.4,.304,.4,.6,.8,1,1,1,1,5/6,2/3,.5];
 const PV_MONTH=[.90,1.02,1.12,1.13,1.05,.88,.72,.75,.86,1,1.06,1];
 const HIST_STORAGE=[1943.43,1446.25,2914.85,5124.24,31370.40,19079.15,10024.79,13773.60,4177.10,726.80,860.90,920.77];
-const ROR_CF=(83633*1000)/(14869*8760);
-const PROR_CF=(63494*1000)/(12831*8760);
-const STORAGE_CF=(41638*1000)/(12370*8760);
+export const ROR_CF=(83633*1000)/(14869*8760);
+export const PROR_CF=(63494*1000)/(12831*8760);
+export const STORAGE_CF=(41638*1000)/(12370*8760);
 const weightedMean=(v:number[])=>v.reduce((sum,n,i)=>sum+n*DAYS[i],0)/365;
 const meanRor=weightedMean(ROR_RATIO),meanPror=weightedMean(PROR_RATIO);
 const solarDay=Array.from({length:24},(_,h)=>Math.max(0,Math.sin(Math.PI*(h-6)/12)));
 const solarMean=solarDay.reduce((a,b)=>a+b,0)/24;
 const solarScale=.17/(weightedMean(PV_MONTH)*solarMean);
-const monthly=MONTHS.map((month,i)=>({
+export const monthlyCalibration2030=MONTHS.map((month,i)=>({
  month,days:DAYS[i],
  ror_ratio:ROR_RATIO[i],
  pror_ratio:PROR_RATIO[i],
@@ -59,7 +59,7 @@ const constraints=[
 ];
 export function Study2030Methodology(){
  function exportMonthly(){
-  const rows=monthly.map(m=>({
+  const rows=monthlyCalibration2030.map(m=>({
    Month:m.month,Days:m.days,Demand_GWh:m.demand_gwh,
    ROR_Season_Ratio:m.ror_ratio,PROR_Season_Ratio:m.pror_ratio,
    ROR_Availability_MW_per_MW:m.ror_avail,
@@ -99,7 +99,7 @@ export function Study2030Methodology(){
     <div className="study-heading"><h3>Monthly operating coefficients used by the solver</h3><button onClick={exportMonthly}><Download size={15}/> Download calibration CSV</button></div>
     <p className="muted">In the table below, “ROR factor” is available MW per MW installed; “PROR inflow” is potential MWh entering pondage per MW installed, per hour. “Solar factor” is the month's mean hourly available MW per MW PV—not the midday peak.</p>
     <div className="tablewrap"><table className="study-coeff-table"><thead><tr><th>Month</th><th>ROR ratio</th><th>ROR factor</th><th>PROR ratio</th><th>PROR inflow</th><th>Solar mean</th><th>Kulekhani historic MWh</th><th>New storage MWh/MW</th></tr></thead>
-    <tbody>{monthly.map(m=><tr key={m.month}><th scope="row">{m.month}</th><td>{format(m.ror_ratio,3)}</td><td>{format(m.ror_avail,3)}</td><td>{format(m.pror_ratio,3)}</td><td>{format(m.pror_inflow,3)}</td><td>{format(m.solar_mean,3)}</td><td>{format(m.existing_storage_mwh,2)}</td><td>{format(m.new_storage_mwh_per_mw,2)}</td></tr>)}</tbody></table></div>
+    <tbody>{monthlyCalibration2030.map(m=><tr key={m.month}><th scope="row">{m.month}</th><td>{format(m.ror_ratio,3)}</td><td>{format(m.ror_avail,3)}</td><td>{format(m.pror_ratio,3)}</td><td>{format(m.pror_inflow,3)}</td><td>{format(m.solar_mean,3)}</td><td>{format(m.existing_storage_mwh,2)}</td><td>{format(m.new_storage_mwh_per_mw,2)}</td></tr>)}</tbody></table></div>
     <p className="study-footnote">Example: February ROR availability is {format(monthly[1].ror_avail,4)} MW per installed MW versus August {format(monthly[7].ror_avail,4)}. The apparent precision comes from numerical calibration—not measurement accuracy. For Kulekhani, NEA's fiscal-year months are approximately remapped to calendar months; figures are historical generation budgets, not measured inflows.</p>
   </section>
   <section className="card study-panel" id="study-optimization">
