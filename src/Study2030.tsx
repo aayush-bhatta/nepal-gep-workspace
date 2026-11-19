@@ -8,7 +8,7 @@ const notebookPath='/research/2030/Nepal_GEP_2030_Complete_Evidence_First.ipynb'
 const notebookUrl=repoRoot+'/blob/main'+notebookPath;
 const colabUrl='https://colab.research.google.com/github/aayush-bhatta/nepal-gep-workspace/blob/main'+notebookPath;
 const sourceJica='https://openjicareport.jica.go.jp/pdf/12387999_01.pdf';
-const sourceNea='https://www.nea.org.np/en/detail/annual-report-20252026';
+const sourceNea='https://www.nea.org.np/en/category/annual-reports';
 type Capacity={Technology:string;Existing_2026_MW_scenario:number;Optimized_New_MW:number;Total_2030_MW:number;Max_New_MW_assumption:number;Capacity_Share_pct:number};
 export const capacity:Capacity[]=[
  {Technology:'ROR',Existing_2026_MW_scenario:2950.466,Optimized_New_MW:271.339657,Total_2030_MW:3221.805657,Max_New_MW_assumption:4893.234,Capacity_Share_pct:35.887608},
@@ -104,8 +104,7 @@ export function Study2030(){
    <div className="study-statusline"><span><CheckCircle2 size={16}/> HiGHS optimal · 12 checks passed</span><span>Inputs not independently verified</span><span>288 representative hours</span></div>
   </header>
   <nav className="study-page-nav" aria-label="2030 study sections">
-   <a href="#study-capacity">Capacity</a><a href="#study-energy">Annual electricity</a><a href="#study-dispatch">Dispatch</a>
-   <a href="#study-evidence">Evidence & calibration</a><a href="#study-optimization">LP equations</a><a href="#study-boundaries">Limitations & sources</a>
+   {[['study-capacity','Capacity'],['study-energy','Annual electricity'],['study-dispatch','Dispatch'],['study-evidence','Evidence & calibration'],['study-optimization','LP equations'],['study-boundaries','Limitations & sources']].map(([id,text])=><button type="button" key={id} onClick={()=>document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'})}>{text}</button>)}
   </nav>
   <div className="study-kpis">
    {[
