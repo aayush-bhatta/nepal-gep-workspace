@@ -10,7 +10,7 @@ const colabUrl='https://colab.research.google.com/github/aayush-bhatta/nepal-gep
 const sourceJica='https://openjicareport.jica.go.jp/pdf/12387999_01.pdf';
 const sourceNea='https://www.nea.org.np/en/detail/annual-report-20252026';
 type Capacity={Technology:string;Existing_2026_MW_scenario:number;Optimized_New_MW:number;Total_2030_MW:number;Max_New_MW_assumption:number;Capacity_Share_pct:number};
-const capacity:Capacity[]=[
+export const capacity:Capacity[]=[
  {Technology:'ROR',Existing_2026_MW_scenario:2950.466,Optimized_New_MW:271.339657,Total_2030_MW:3221.805657,Max_New_MW_assumption:4893.234,Capacity_Share_pct:35.887608},
  {Technology:'PROR',Existing_2026_MW_scenario:844.9,Optimized_New_MW:1946.682149,Total_2030_MW:2791.582149,Max_New_MW_assumption:2866.7,Capacity_Share_pct:31.09536},
  {Technology:'Storage Hydro',Existing_2026_MW_scenario:106,Optimized_New_MW:675.4,Total_2030_MW:781.4,Max_New_MW_assumption:675.4,Capacity_Share_pct:8.703994},
