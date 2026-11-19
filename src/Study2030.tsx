@@ -1,6 +1,7 @@
 import React,{useState} from 'react';
 import {BookOpen,Download,ExternalLink,AlertTriangle,CheckCircle2} from 'lucide-react';
 import {csv,downloadBlob} from './db';
+import {Study2030Methodology} from './Study2030Methodology';
 
 const repoRoot='https://github.com/aayush-bhatta/nepal-gep-workspace';
 const notebookPath='/research/2030/Nepal_GEP_2030_Complete_Evidence_First.ipynb';
@@ -88,81 +89,111 @@ function StackedDispatch({data,label}:{data:number[][];label:string}){
   <small className="muted">MW · Model output rounded for display; not an observed daily load curve. The same synthetic load shape applies to every month.</small>
  </figure>;
 }
-const methods=[
- {name:'Demand',kind:'JICA source + synthetic shape',detail:'24,737 GWh consumer energy; assumed 13.9% loss → 28,730.55 GWh grid energy. Sending-end peak 4,949 MW. A repeated 24-point daily load shape constructs 8,760 synthetic hours.'},
- {name:'Hydrology',kind:'2040 resource proxy, not observation',detail:'ROR and PROR annual planning CFs of 64.21% and 56.49%, calibrated to illustrative wet/dry monthly factors. PROR has a six-hour cyclic pondage assumption.'},
- {name:'Installed hydro',kind:'NEA aggregate + unresolved classification',detail:'3,901.366 MW total 2026 hydro plus 154.940 MW solar. 1,077.481 MW hydro is unclassified and assigned ROR-like behavior in this scenario; 904.600 MW of ROR-family links still require source recheck.'},
- {name:'Storage hydro',kind:'Historical generation + new reservoir proxy',detail:'106 MW existing Kulekhani chain with historical 92.362 GWh annual output. Candidate seasonal reservoir modeled with 900 MWh per MW, a site-dependent assumption.'},
- {name:'Solar',kind:'Synthetic profile',detail:'Assumed 17% annual capacity factor and 12 monthly cloudiness weights, combined with a 24-hour sine-shaped availability curve; not measured site-level solar time series.'},
- {name:'Cost / trade / reliability',kind:'Planning scenarios',detail:'Embedded cost benchmarks; 145 NPR/USD, 8% discount rate, 750 MW import cap, historical import-price proxy ~9.02 NPR/kWh, VOLL 110.2 NPR/kWh, deterministic ENS limit 0.01%.'}
-];
+
 export function Study2030(){
  const[month,setMonth]=useState<'dry'|'wet'>('dry');
+ const existingTotal=capacity.reduce((sum,c)=>sum+c.Existing_2026_MW_scenario,0);
+ const addedTotal=capacity.reduce((sum,c)=>sum+c.Optimized_New_MW,0);
+ const totalCapacity=existingTotal+addedTotal;
+ const maxTotal=Math.max(...capacity.map(c=>c.Total_2030_MW));
  return <section className="study-page">
-  <div className="heading"><div>
-   <p className="eyebrow">2030 · REPRODUCIBLE MODEL EVIDENCE</p>
-   <h1>2030 optimization study</h1>
-   <p>One-node Nepal GEP · JICA middle-case demand · SciPy HiGHS linear program</p>
-  </div></div>
-  <div className="study-warning"><AlertTriangle size={19}/><div><b>Illustrative modeled optimum—not a verified construction recommendation.</b><p>The solver passed its mathematical checks, but classification, hourly profiles, investment caps and cost inputs remain partly provisional. No 2040/2050 results or BESS results are implied.</p></div></div>
+  <header className="study-intro">
+   <p className="eyebrow">GENERATION EXPANSION PLANNING · 2030 BASE CASE</p>
+   <h1>How the 2030 generation mix was obtained</h1>
+   <p>The model starts with an allocated 2026 installed fleet, decides how many additional megawatts to construct by 2030, and dispatches the combined fleet against a JICA-based electricity-demand forecast. This page documents the results together with the data construction and operating constraints that produced them.</p>
+   <div className="study-statusline"><span><CheckCircle2 size={16}/> HiGHS optimal · 12 checks passed</span><span>Inputs not independently verified</span><span>288 representative hours</span></div>
+  </header>
+  <nav className="study-page-nav" aria-label="2030 study sections">
+   <a href="#study-capacity">Capacity</a><a href="#study-energy">Annual electricity</a><a href="#study-dispatch">Dispatch</a>
+   <a href="#study-evidence">Evidence & calibration</a><a href="#study-optimization">LP equations</a><a href="#study-boundaries">Limitations & sources</a>
+  </nav>
   <div className="study-kpis">
-   {[['Total capacity','8,977.49','MW'],['Annual grid demand','28,730.55','GWh'],['Annual modeled cost','149.27','NPR billion'],['Unserved energy','0','GWh']].map(x=><div className="card study-kpi" key={x[0]}><small>{x[0]}</small><strong>{x[1]}</strong><span>{x[2]}</span></div>)}
+   {[
+    ['2026 installed baseline',fmt(existingTotal),'MW · model allocation'],
+    ['New capacity by 2030',fmt(addedTotal),'MW · optimiser decision'],
+    ['Total installed 2030',fmt(totalCapacity),'MW · existing + new'],
+    ['2030 grid electricity',fmt(28730.5458769),'GWh/year · forecast-adjusted']
+   ].map(x=><div className="card study-kpi" key={x[0]}><small>{x[0]}</small><strong>{x[1]}</strong><span>{x[2]}</span></div>)}
   </div>
-  <section className="card study-panel"><div className="study-heading"><h2>Capacity expansion mix</h2><button onClick={()=>saveCsv('nepal_gep_2030_capacity_mix.csv',capacity)}> <Download size={15}/> Export CSV</button></div>
-   <p className="muted">Existing capacity is a modeled 2026 technology allocation, not an official technology-level classification. New capacity comes directly from the LP solution.</p>
-   <div className="tablewrap"><table><thead><tr><th>Technology</th><th>Existing MW</th><th>New MW</th><th>Total 2030 MW</th><th>Capacity share</th></tr></thead><tbody>
-    {capacity.map(r=><tr key={r.Technology}><td><b>{r.Technology}</b></td><td>{fmt(r.Existing_2026_MW_scenario)}</td><td>{fmt(r.Optimized_New_MW)}</td><td>{fmt(r.Total_2030_MW)}</td><td>{fmt(r.Capacity_Share_pct)}%</td></tr>)}
-   </tbody></table></div>
-   <div className="study-bars">{capacity.map((r,i)=><div key={r.Technology}><span>{r.Technology}</span><div className="study-bar-track"><div style={{width:(r.Capacity_Share_pct)+'%',background:colors[i]}}/></div><b>{fmt(r.Capacity_Share_pct,1)}%</b></div>)}</div>
-   <p className="study-footnote">The assumed new-build ceilings are binding for storage hydro and solar PV. No verified 2030 site commissioning schedule is claimed.</p>
-  </section>
-  <section className="card study-panel"><div className="study-heading"><h2>Annual electricity supply</h2><button onClick={()=>saveCsv('nepal_gep_2030_energy_mix.csv',energy)}> <Download size={15}/> Export CSV</button></div>
-   <p className="muted">Two denominators are shown: total grid supply including imports (28,730.55 GWh), and domestic production only (27,189.94 GWh).</p>
-   <div className="tablewrap"><table><thead><tr><th>Resource</th><th>GWh</th><th>% of grid demand</th><th>% of domestic generation</th></tr></thead><tbody>
-    {energy.map(r=><tr key={r.Resource}><td>{r.Resource}</td><td>{fmt(r.Energy_GWh)}</td><td>{fmt(r.Share_of_Annual_Demand_pct)}%</td><td>{r.Resource==='Imports'||r.Resource==='Unserved'?'—':fmt(r.Share_of_Domestic_Generation_pct)+'%'}</td></tr>)}
-   </tbody></table></div>
-   <p className="study-footnote">Hydro and PV curtailment: 929.207 GWh. Deterministic ENS: 0 GWh; this is not a probabilistic LOLE/EENS reliability result. No exports modeled.</p>
-  </section>
-  <section className="card study-panel">
-   <div className="study-heading"><h2>Daily dispatch comparison</h2><div className="study-segmented">
-    <button type="button" className={month==='dry'?'active':''} onClick={()=>setMonth('dry')}>February · dry</button>
-    <button type="button" className={month==='wet'?'active':''} onClick={()=>setMonth('wet')}>August · wet</button>
+  <p className="study-first-note"><AlertTriangle size={17}/> <span><b>Scope of this result.</b> The solution is numerically optimal for this illustrative scenario. Some hydro classifications, the hourly resource shapes, cost benchmarks and development ceilings remain assumptions. It is not a validated national investment recommendation.</span></p>
+  <section className="card study-panel" id="study-capacity">
+   <div className="study-section-heading"><span className="study-section-num">RESULT 01</span><div>
+    <h2>Installed capacity in 2030: existing fleet plus new construction</h2>
+    <p>There are three distinct quantities in the result. The first column allocates the capacity already present in the 2026 model baseline. The second is the <em>new capacity selected by the optimisation</em>. Adding them gives installed capacity in 2030. Only the middle column is an investment decision.</p>
    </div></div>
-   <StackedDispatch data={month==='dry'?dry:wet} label={month==='dry'?'February dry season':'August wet season'}/>
-   <p className="study-footnote">These figures are calculated from the optimized 288 representative hourly decisions, not fabricated charts. All 12 monthly days repeat within their month to reconstruct the 8,760-hour dispatch.</p>
-  </section>
-  <section className="card study-panel">
-   <h2>What went into the model?</h2>
-   <div className="study-methods">{methods.map(m=><article key={m.name}><div><b>{m.name}</b><small>{m.kind}</small></div><p>{m.detail}</p></article>)}</div>
-  </section>
-  <section className="card study-panel">
-   <h2>Optimization formulation and scope</h2>
-   <p>Minimize annualized new-build CAPEX, fixed O&M, variable generation cost, import cost and modeled value of unserved energy, subject to hourly demand balance, availability limits, water budgets and investment ceilings.</p>
-   <div className="study-math">
-    <div><b>Energy balance</b><code>ROR + PROR + Storage + Solar + Imports + ENS = Demand</code></div>
-    <div><b>ROR / solar limits</b><code>Dispatch ≤ (Existing MW + New MW) × hourly resource availability</code></div>
-    <div><b>PROR water balance</b><code>Pondage(h+1) = Pondage(h) + inflow − dispatch − spill</code></div>
-    <div><b>Storage hydro balance</b><code>Reservoir(m+1) = Reservoir(m) + monthly inflow − generation − spill</code></div>
-    <div><b>Reliability</b><code>Deterministic ENS ≤ 0.01% of modeled annual grid energy</code></div>
-   </div>
-   <p className="muted">2,633 LP variables; 614 equality and 1,767 upper-bound constraints. 12 representative days × 24 hours = 288 optimized hourly states; 8,760 rows are reconstructed, not independently optimized. All 12 notebook validation checks passed on a local rerun.</p>
-  </section>
-  <section className="card study-panel"><div className="study-heading"><h2>Annual cost breakdown</h2><button onClick={()=>saveCsv('nepal_gep_2030_annual_costs.csv',costs)}><Download size={15}/> Export CSV</button></div>
-   <div className="tablewrap"><table><thead><tr><th>Component</th><th>NPR million / year</th></tr></thead><tbody>
-    {costs.map(x=><tr key={x.Cost_Component}><td>{x.Cost_Component}</td><td>{fmt(x.Million_NPR_per_year)}</td></tr>)}
-    <tr><th>Total modeled annual system cost</th><th>{fmt(costs.reduce((a,b)=>a+b.Million_NPR_per_year,0))}</th></tr>
+   <div className="study-heading"><p className="muted study-table-label">Installed MW, 2026 baseline → 2030 result</p><button onClick={()=>saveCsv('nepal_gep_2030_capacity_mix.csv',capacity)}><Download size={15}/> Capacity CSV</button></div>
+   <div className="tablewrap"><table className="study-capacity-table"><thead><tr>
+    <th>Technology</th><th>Existing 2026 (MW)</th><th>New by 2030 (MW)</th><th>Total 2030 (MW)</th><th>Share of 2030 total</th><th>New-build ceiling (MW)</th>
+   </tr></thead><tbody>
+    {capacity.map(r=><tr key={r.Technology}><th scope="row">{r.Technology}</th>
+      <td>{fmt(r.Existing_2026_MW_scenario)}</td><td><b>+{fmt(r.Optimized_New_MW)}</b></td><td><b>{fmt(r.Total_2030_MW)}</b></td>
+      <td>{fmt(r.Capacity_Share_pct)}%</td><td>{fmt(r.Max_New_MW_assumption)}</td>
+    </tr>)}
+    <tr className="study-total-row"><th scope="row">TOTAL</th><td>{fmt(existingTotal)}</td><td>+{fmt(addedTotal)}</td><td>{fmt(totalCapacity)}</td><td>100%</td><td>—</td></tr>
    </tbody></table></div>
-   <p className="muted">Model cost accounting uses a historical import-price proxy and embedded cost benchmarks; tariff and investment uncertainties require sensitivity analysis.</p>
+   <h3 className="study-inline-heading">What makes up each 2030 total?</h3>
+   <div className="study-bar-key"><span><i className="study-key-existing"/>Modelled existing 2026</span><span><i className="study-key-new"/>New MW chosen for 2030</span></div>
+   <div className="study-capacity-bars">{capacity.map(c=><div className="study-capacity-row" key={c.Technology}>
+     <span>{c.Technology}</span>
+     <div className="study-capacity-track" aria-label={c.Technology+' existing '+fmt(c.Existing_2026_MW_scenario)+' new '+fmt(c.Optimized_New_MW)}>
+      <span className="study-capacity-existing" style={{width:(c.Existing_2026_MW_scenario/maxTotal*100)+'%'}}/>
+      <span className="study-capacity-new" style={{width:(c.Optimized_New_MW/maxTotal*100)+'%'}}/>
+     </div><b>{fmt(c.Total_2030_MW)} MW</b>
+    </div>)}</div>
+   <p className="study-interpretation">The model builds substantial new PROR and PV capacity. The solar and storage-hydro results reach the model's assumed new-build ceilings, which makes those ceilings important to the answer. They are indicative portfolio screens, not independently verified 2030 commissioning limits. The 2026 hydro allocation also assigns 1,077.481 MW of unclassified capacity to ROR-like operation; the split must be tested before claiming that these exact technologies should be built.</p>
   </section>
-  <section className="card study-panel">
-   <div className="study-heading"><h2>Reproduce and inspect the evidence</h2><CheckCircle2 size={20} color="#2e6d50"/></div>
+  <section className="card study-panel" id="study-energy">
+   <div className="study-section-heading"><span className="study-section-num">RESULT 02</span><div>
+    <h2>How the 2030 demand is supplied</h2>
+    <p>Installed megawatts are not the same as annual electricity delivered. The LP dispatches the selected capacity subject to seasonal river availability, hourly PV availability, reservoir energy budgets and import limits.</p>
+   </div></div>
+   <div className="study-heading"><p className="muted study-table-label">Annual electricity supply (GWh/year)</p><button onClick={()=>saveCsv('nepal_gep_2030_energy_mix.csv',energy)}><Download size={15}/> Energy CSV</button></div>
+   <div className="tablewrap"><table><thead><tr><th>Source</th><th>Energy (GWh)</th><th>Share of total demand</th><th>Share of domestic generation</th></tr></thead><tbody>
+    {energy.map(r=><tr key={r.Resource}><th scope="row">{r.Resource}</th><td>{fmt(r.Energy_GWh)}</td><td>{fmt(r.Share_of_Annual_Demand_pct)}%</td><td>{r.Resource==='Imports'||r.Resource==='Unserved'?'—':fmt(r.Share_of_Domestic_Generation_pct)+'%'}</td></tr>)}
+    <tr className="study-total-row"><th>Demand served + unserved</th><td>{fmt(28730.5458769)}</td><td>100%</td><td>—</td></tr>
+   </tbody></table></div>
+   <p className="study-interpretation">Domestic technologies supply <b>27,189.94 GWh</b>; imports provide another <b>1,540.61 GWh</b>. The denominator for the third column is total grid demand, including imports. The fourth column uses domestic generation only. The model reports <b>929.21 GWh of unused river/PV potential</b> and zero deterministic unserved energy in this run. Neither result establishes real-world firm adequacy or reliability during outages.</p>
+  </section>
+  <section className="card study-panel" id="study-dispatch">
+   <div className="study-section-heading"><span className="study-section-num">RESULT 03</span><div>
+    <h2>Dry-season and wet-season dispatch</h2>
+    <p>One representative day is optimised for each month. February has the weakest modelled river availability; August has the strongest. The area under each coloured band is dispatched MW, while the dark line is the same demand profile in both months.</p>
+   </div></div>
+   <div className="study-heading"><div className="study-segmented" role="group" aria-label="Representative dispatch month">
+     <button type="button" className={month==='dry'?'active':''} onClick={()=>setMonth('dry')}>February · dry</button>
+     <button type="button" className={month==='wet'?'active':''} onClick={()=>setMonth('wet')}>August · wet</button>
+   </div></div>
+   <StackedDispatch data={month==='dry'?dry:wet} label={month==='dry'?'February (dry-season representative day)':'August (wet-season representative day)'}/>
+   <p className="study-interpretation">{month==='dry'?
+     'In February, low ROR availability and limited PROR water make imports and flexible hydro important. The model uses its 750 MW import ceiling through the representative day.':
+     'In August, higher river availability displaces imported electricity in this representative day; some potential generation is unused because the model does not allow exports.'}
+   </p>
+   <p className="study-footnote">The figure plots output rows from the solved LP, rounded for display. Twelve 24-hour representative days provide 288 solved hours; identical daily dispatch is then repeated by month to create 8,760 reconstructed hours. This is not a chronological hourly power-system simulation with varying weather or outages.</p>
+  </section>
+  <section className="card study-panel" id="study-cost">
+   <div className="study-section-heading"><span className="study-section-num">RESULT 04</span><div>
+    <h2>Annualised system cost</h2>
+    <p>All categories are converted to NPR million per year. The model counts annualised construction of new plants, fixed O&M of both existing and new capacity, variable generation costs, and imports. It does not add a PPA tariff on top of investment recovery.</p>
+   </div></div>
+   <div className="study-heading"><p className="muted study-table-label">Cost reconstruction from the solved investment and dispatch</p><button onClick={()=>saveCsv('nepal_gep_2030_annual_costs.csv',costs)}><Download size={15}/> Cost CSV</button></div>
+   <div className="tablewrap"><table><thead><tr><th>Cost component</th><th>NPR million / year</th><th>NPR billion / year</th></tr></thead>
+   <tbody>{costs.map(x=><tr key={x.Cost_Component}><th scope="row">{x.Cost_Component}</th><td>{fmt(x.Million_NPR_per_year)}</td><td>{fmt(x.Million_NPR_per_year/1000)}</td></tr>)}
+    <tr className="study-total-row"><th>Total annual model cost</th><td>{fmt(costs.reduce((sum,x)=>sum+x.Million_NPR_per_year,0))}</td><td>{fmt(costs.reduce((sum,x)=>sum+x.Million_NPR_per_year,0)/1000)}</td></tr>
+   </tbody></table></div>
+   <p className="study-footnote">Investment CAPEX, exchange rate, economic lives, discount rate, generation O&M and import price are scenario inputs, not independently audited Nepal 2030 project contracts. Details of the formula and their units are provided below.</p>
+  </section>
+  <Study2030Methodology/>
+  <section className="card study-panel" id="study-reproducibility">
+   <div className="study-section-heading"><span className="study-section-num">06</span><div>
+    <h2>Notebook, data and reproducibility</h2><p>The versioned Colab notebook contains all model variables, sparse constraint matrices, data-calibration steps, 12 numerical checks and CSV exports. It can be run independently and audited alongside the study tables.</p>
+   </div></div>
    <div className="study-links">
-    <a href={colabUrl} target="_blank" rel="noopener noreferrer"><BookOpen size={17}/> Open exact notebook in Google Colab <ExternalLink size={14}/></a>
-    <a href={notebookUrl} target="_blank" rel="noopener noreferrer"><BookOpen size={17}/> View versioned notebook on GitHub <ExternalLink size={14}/></a>
-    <a href={sourceJica} target="_blank" rel="noopener noreferrer"><ExternalLink size={16}/> JICA Integrated Power System Development Plan (2024)</a>
-    <a href={sourceNea} target="_blank" rel="noopener noreferrer"><ExternalLink size={16}/> NEA A Year in Review FY2025/26 (notebook's cited source)</a>
+    <a href={colabUrl} target="_blank" rel="noopener noreferrer"><BookOpen size={17}/> Run the 2030 notebook in Google Colab <ExternalLink size={14}/></a>
+    <a href={notebookUrl} target="_blank" rel="noopener noreferrer"><BookOpen size={17}/> View source and versions on GitHub <ExternalLink size={14}/></a>
+    <a href={sourceJica} target="_blank" rel="noopener noreferrer"><ExternalLink size={16}/> JICA IPSDP Final Report 2024</a>
+    <a href={sourceNea} target="_blank" rel="noopener noreferrer"><ExternalLink size={16}/> NEA annual report archive</a>
    </div>
-   <p className="study-footnote">The input register, model-run record and research log contain separate provenance and uncertainty notes. The exact notebook runs top to bottom without external Drive inputs by using its clearly labelled embedded fallback benchmarks.</p>
+   <p className="study-footnote">Software: Python SciPy <code>linprog</code> / HiGHS. Model size: 2,633 variables, 614 equality constraints and 1,767 upper-bound constraints. 2026 plant classifications and project-level investment feasibility still require verification. No BESS or completed 2040/2050 model results are included.</p>
   </section>
  </section>;
 }
