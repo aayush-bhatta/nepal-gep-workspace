@@ -189,6 +189,7 @@ export function Study2030(){
    <div className="study-links">
     <a href={colabUrl} target="_blank" rel="noopener noreferrer"><BookOpen size={17}/> Run the 2030 notebook in Google Colab <ExternalLink size={14}/></a>
     <a href={notebookUrl} target="_blank" rel="noopener noreferrer"><BookOpen size={17}/> View source and versions on GitHub <ExternalLink size={14}/></a>
+    <a href={repoRoot+'/blob/main/research/2030/METHODOLOGY_AND_EVIDENCE.md'} target="_blank" rel="noopener noreferrer"><BookOpen size={17}/> Full methodology and evidence note <ExternalLink size={14}/></a>
     <a href={sourceJica} target="_blank" rel="noopener noreferrer"><ExternalLink size={16}/> JICA IPSDP Final Report 2024</a>
     <a href={sourceNea} target="_blank" rel="noopener noreferrer"><ExternalLink size={16}/> NEA annual report archive</a>
    </div>
