@@ -1,0 +1,13 @@
+Check,Passed,Detail
+NEA grid-connected hydro = 3901.366 MW,True,3901.366
+2026 national solar = 154.940 MW,True,154.94
+Annual grid demand = JICA loss-adjusted target,True,28730.545876887336
+Hourly balance,True,4.547473508864641e-13
+Import capacity ceiling,True,750.0
+ROR availability ceiling,True,12 monthly checks
+Solar availability ceiling,True,288 hourly checks
+Existing storage never exceeds historical monthly energy,True,12 monthly checks
+PROR pondage cyclic per day,True,12 daily pondage boundaries
+Seasonal new storage cyclic per year,True,start/end stored MWh
+Deterministic ENS <= annual limit,True,ENS budget 2873.1 MWh
+New capacities within scenario ceilings,True,new capacity bounds checked
